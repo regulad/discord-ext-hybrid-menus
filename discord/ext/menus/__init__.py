@@ -24,6 +24,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 """
 
+import copy
 import os
 import asyncio
 import inspect
@@ -934,9 +935,19 @@ class ViewMenu(ReactionMenu):
         msg = self.message
         if msg is None:
             if self.auto_send_view:
-                ctx.send = lambda *args, **kwargs: self.send_with_view(ctx, *args, **kwargs)
-                channel.send = lambda *args, **kwargs: self.send_with_view(channel, *args, **kwargs)
-            self.message = msg = await self.send_initial_message(ctx, channel)
+                new_ctx = copy.deepcopy(ctx)
+                new_channel = copy.deepcopy(channel)
+                try:
+                    ctx.send = lambda *args, **kwargs: self.send_with_view(ctx, *args, **kwargs)
+                except AttributeError:
+                    pass
+                try:
+                    channel.send = lambda *args, **kwargs: self.send_with_view(channel, *args, **kwargs)
+                except AttributeError:
+                    pass
+                self.message = msg = await self.send_initial_message(new_ctx, new_channel)
+            else:
+                self.message = msg = await self.send_initial_message(ctx, channel)
 
         if self.should_add_reactions():
             for task in self.__tasks:
