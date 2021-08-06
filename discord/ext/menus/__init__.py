@@ -935,12 +935,10 @@ class ViewMenu(ReactionMenu):
         msg = self.message
         if msg is None:
             if self.auto_send_view:
-                new_ctx = copy.copy(ctx.send)
-                ctx.send = lambda *args, **kwargs: new_ctx(*args, **kwargs, view=self.build_view())
+                new_ctx = copy.copy(ctx)
+                new_ctx.send = lambda *args, **kwargs: new_ctx(*args, **kwargs, view=self.build_view())
 
-                self.message = msg = await self.send_initial_message(ctx, ctx)  # Not ideal. Stupid.
-
-                ctx.send = new_ctx
+                self.message = msg = await self.send_initial_message(new_ctx, new_ctx)  # Not ideal. Stupid.
             else:
                 self.message = msg = await self.send_initial_message(ctx, channel)
 
