@@ -938,11 +938,11 @@ class ViewMenu(ReactionMenu):
                 new_ctx = copy.deepcopy(ctx)
                 new_channel = copy.deepcopy(channel)
                 try:
-                    ctx.send = lambda *args, **kwargs: self.send_with_view(ctx, *args, **kwargs)
+                   new_ctx.send = lambda *args, **kwargs: self.send_with_view(ctx, *args, **kwargs)
                 except AttributeError:
                     pass
                 try:
-                    channel.send = lambda *args, **kwargs: self.send_with_view(channel, *args, **kwargs)
+                    new_channel.send = lambda *args, **kwargs: self.send_with_view(channel, *args, **kwargs)
                 except AttributeError:
                     pass
                 self.message = msg = await self.send_initial_message(new_ctx, new_channel)
