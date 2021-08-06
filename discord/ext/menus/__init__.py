@@ -1217,7 +1217,7 @@ class ViewMenuPages(ReactionMenuPages, ViewMenu):
     def __init__(self, source, **kwargs):
         self._source = source
         self.current_page = 0
-        super(ViewMenu, self).__init__(auto_send_view=False, **kwargs)
+        super().__init__(auto_send_view=False, **kwargs)
 
     async def send_initial_message(self, ctx, channel):
         page = await self._source.get_page(0)
