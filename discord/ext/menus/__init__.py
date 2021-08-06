@@ -936,7 +936,7 @@ class ViewMenu(ReactionMenu):
         if msg is None:
             if self.auto_send_view:
                 new_ctx = copy.copy(ctx)
-                new_ctx.send = lambda *args, **kwargs: new_ctx(*args, **kwargs, view=self.build_view())
+                new_ctx.send = lambda *args, **kwargs: ctx.send(*args, **kwargs, view=self.build_view())
 
                 self.message = msg = await self.send_initial_message(new_ctx, new_ctx)  # Not ideal. Stupid.
             else:
