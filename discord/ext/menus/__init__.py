@@ -24,15 +24,15 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 """
 
+import os
 import asyncio
-import discord
-
-import itertools
 import inspect
-import bisect
+import itertools
 import logging
 import re
 from collections import OrderedDict, namedtuple
+
+import discord
 
 # Needed for the setup.py script
 __version__ = '1.0.0-a'
@@ -40,24 +40,30 @@ __version__ = '1.0.0-a'
 # consistency with the `discord` namespaced logging
 log = logging.getLogger(__name__)
 
+
 class MenuError(Exception):
     pass
+
 
 class CannotEmbedLinks(MenuError):
     def __init__(self):
         super().__init__('Bot does not have embed links permission in this channel.')
 
+
 class CannotSendMessages(MenuError):
     def __init__(self):
         super().__init__('Bot cannot send messages in this channel.')
+
 
 class CannotAddReactions(MenuError):
     def __init__(self):
         super().__init__('Bot cannot add reactions in this channel.')
 
+
 class CannotReadMessageHistory(MenuError):
     def __init__(self):
         super().__init__('Bot does not have Read Message History permissions in this channel.')
+
 
 class Position:
     __slots__ = ('number', 'bucket')
@@ -93,17 +99,23 @@ class Position:
     def __repr__(self):
         return '<{0.__class__.__name__}: {0.number}>'.format(self)
 
+
 class Last(Position):
     __slots__ = ()
+
     def __init__(self, number=0):
         super().__init__(number, bucket=2)
 
+
 class First(Position):
     __slots__ = ()
+
     def __init__(self, number=0):
         super().__init__(number, bucket=0)
 
+
 _custom_emoji = re.compile(r'<?(?P<animated>a)?:?(?P<name>[A-Za-z0-9\_]+):(?P<id>[0-9]{13,20})>?')
+
 
 def _cast_emoji(obj, *, _custom_emoji=_custom_emoji):
     if isinstance(obj, discord.PartialEmoji):
@@ -118,6 +130,7 @@ def _cast_emoji(obj, *, _custom_emoji=_custom_emoji):
         name = groups['name']
         return discord.PartialEmoji(name=name, animated=animated, id=emoji_id)
     return discord.PartialEmoji(name=obj, id=None, animated=False)
+
 
 class Button:
     """Represents a reaction-style button for the :class:`Menu`.
@@ -174,7 +187,7 @@ class Button:
             self._skip_if = value
         else:
             # Unfurl the method to not be bound
-            if not isinstance(menu_self, Menu):
+            if not isinstance(menu_self, ReactionMenu):
                 raise TypeError('skip_if bound method must be from Menu not %r' % menu_self)
 
             self._skip_if = value.__func__
@@ -191,7 +204,7 @@ class Button:
             pass
         else:
             # Unfurl the method to not be bound
-            if not isinstance(menu_self, Menu):
+            if not isinstance(menu_self, ReactionMenu):
                 raise TypeError('action bound method must be from Menu not %r' % menu_self)
 
             value = value.__func__
@@ -211,6 +224,7 @@ class Button:
 
     def is_valid(self, menu):
         return not self.skip_if(menu)
+
 
 def button(emoji, **kwargs):
     """Denotes a method to be button for the :class:`Menu`.
@@ -242,11 +256,14 @@ def button(emoji, **kwargs):
     emoji: Union[:class:`str`, :class:`discord.PartialEmoji`]
         The emoji to use for the button.
     """
+
     def decorator(func):
         func.__menu_button__ = _cast_emoji(emoji)
         func.__menu_button_kwargs__ = kwargs
         return func
+
     return decorator
+
 
 class _MenuMeta(type):
     @classmethod
@@ -288,7 +305,8 @@ class _MenuMeta(type):
             buttons[emoji] = Button(emoji, func, **func.__menu_button_kwargs__)
         return buttons
 
-class Menu(metaclass=_MenuMeta):
+
+class ReactionMenu(metaclass=_MenuMeta):
     r"""An interface that allows handling menus by using reactions as buttons.
 
     Buttons should be marked with the :func:`button` decorator. Please note that
@@ -320,8 +338,9 @@ class Menu(metaclass=_MenuMeta):
         calling :meth:`send_initial_message`\, if for example you have a pre-existing
         message you want to attach a menu to.
     """
+
     def __init__(self, *, timeout=180.0, delete_message_after=False,
-                          clear_reactions_after=False, check_embeds=False, message=None):
+                 clear_reactions_after=False, check_embeds=False, message=None):
 
         self.timeout = timeout
         self.delete_message_after = delete_message_after
@@ -409,6 +428,7 @@ class Menu(metaclass=_MenuMeta):
 
             async def dummy():
                 raise MenuError('Menu has not been started yet')
+
             return dummy()
 
     def remove_button(self, emoji, *, react=False):
@@ -449,10 +469,12 @@ class Menu(metaclass=_MenuMeta):
                     # doesn't get triggered.
                     self.buttons.pop(emoji, None)
                     await self.message.remove_reaction(emoji, self.__me)
+
                 return wrapped()
 
             async def dummy():
                 raise MenuError('Menu has not been started yet')
+
             return dummy()
 
     def clear_buttons(self, *, react=False):
@@ -505,8 +527,10 @@ class Menu(metaclass=_MenuMeta):
                         await self.message.remove_reaction(reaction, self.__me)
 
                 return wrapped()
+
             async def dummy():
                 raise MenuError('Menu has not been started yet')
+
             return dummy()
 
     def should_add_reactions(self):
@@ -717,6 +741,7 @@ class Menu(metaclass=_MenuMeta):
             async def add_reactions_task():
                 for emoji in self.buttons:
                     await msg.add_reaction(emoji)
+
             self.__tasks.append(bot.loop.create_task(add_reactions_task()))
 
             if wait:
@@ -768,6 +793,175 @@ class Menu(metaclass=_MenuMeta):
             task.cancel()
         self.__tasks.clear()
 
+
+class ViewMenu(ReactionMenu):
+    def __init__(self, *, auto_defer=True, auto_send_view=True, **kwargs):
+        super().__init__(**kwargs)
+        self.auto_defer = auto_defer
+        self.auto_send_view = auto_send_view
+        self.view = None
+        self.__tasks = []
+
+    def build_view(self):
+        if not self.should_add_reactions():
+            return None
+
+        def make_callback(button):
+            async def callback(interaction):
+                if interaction.user.id not in {self.bot.owner_id, self._author_id, *self.bot.owner_ids}:
+                    return
+                if self.auto_defer:
+                    await interaction.response.defer()
+                try:
+                    if button.lock:
+                        async with self._lock:
+                            if self._running:
+                                await button(self, interaction)
+                    else:
+                        await button(self, interaction)
+                except Exception as exc:
+                    await self.on_menu_button_error(exc)
+
+            return callback
+
+        view = discord.ui.View(timeout=self.timeout)
+        for i, (emoji, button) in enumerate(self.buttons.items()):
+            item = discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=emoji, row=i // 5)
+            item.callback = make_callback(button)
+            view.add_item(item)
+
+        self.view = view
+        return view
+
+    def add_button(self, button, *, react=False):
+        super().add_button(button)
+
+        if react:
+            if self.__tasks:
+                async def wrapped():
+                    self.buttons[button.emoji] = button
+                    try:
+                        await self.message.edit(view=self.build_view())
+                    except discord.HTTPException:
+                        raise
+
+                return wrapped()
+
+            async def dummy():
+                raise MenuError("Menu has not been started yet")
+
+            return dummy()
+
+    def remove_button(self, emoji, *, react=False):
+        super().remove_button(emoji)
+
+        if react:
+            if self.__tasks:
+                async def wrapped():
+                    self.buttons.pop(emoji, None)
+                    try:
+                        await self.message.edit(view=self.build_view())
+                    except discord.HTTPException:
+                        raise
+
+                return wrapped()
+
+            async def dummy():
+                raise MenuError("Menu has not been started yet")
+
+            return dummy()
+
+    def clear_buttons(self, *, react=False):
+        super().clear_buttons()
+
+        if react:
+            if self.__tasks:
+                async def wrapped():
+                    try:
+                        await self.message.edit(view=None)
+                    except discord.HTTPException:
+                        raise
+
+                return wrapped()
+
+            async def dummy():
+                raise MenuError("Menu has not been started yet")
+
+            return dummy()
+
+    async def _internal_loop(self):
+        try:
+            self.__timed_out = await self.view.wait()
+        except Exception as e:
+            print(e)
+        finally:
+            self._event.set()
+
+            try:
+                await self.finalize(self.__timed_out)
+            except Exception:
+                pass
+            finally:
+                self.__timed_out = False
+
+            if self.bot.is_closed():
+                return
+
+            try:
+                if self.delete_message_after:
+                    return await self.message.delete()
+
+                if self.clear_reactions_after:
+                    return await self.message.edit(view=None)
+            except Exception:
+                pass
+
+    async def start(self, ctx, *, channel=None, wait=False):
+        try:
+            del self.buttons
+        except AttributeError:
+            pass
+
+        self.bot = bot = ctx.bot
+        self.ctx = ctx
+        self._author_id = ctx.author.id
+        channel = channel or ctx.channel
+        is_guild = hasattr(channel, "guild")
+        me = channel.guild.me if is_guild else ctx.bot.user
+        permissions = channel.permissions_for(me)
+        self._verify_permissions(ctx, channel, permissions)
+        self._event.clear()
+        msg = self.message
+        if msg is None:
+            if self.auto_send_view:
+                ctx.send = lambda *args, **kwargs: self.send_with_view(ctx, *args, **kwargs)
+                channel.send = lambda *args, **kwargs: self.send_with_view(channel, *args, **kwargs)
+            self.message = msg = await self.send_initial_message(ctx, channel)
+
+        if self.should_add_reactions():
+            for task in self.__tasks:
+                task.cancel()
+            self.__tasks.clear()
+
+            self._running = True
+            self.__tasks.append(bot.loop.create_task(self._internal_loop()))
+
+            if wait:
+                await self._event.wait()
+
+    def send_with_view(self, messageable, *args, **kwargs):
+        return messageable.send(*args, **kwargs, view=self.build_view())
+
+    def stop(self):
+        self._running = False
+        for task in self.__tasks:
+            task.cancel()
+        self.__tasks.clear()
+
+
+Menu = ViewMenu if bool(os.environ.get("DISCORD_EXT_MENUS_USE_VIEWS", "True")) else ReactionMenu
+
+
 class PageSource:
     """An interface representing a menu page's data source for the actual menu page.
 
@@ -777,6 +971,7 @@ class PageSource:
     - :meth:`is_paginating`
     - :meth:`format_page`
     """
+
     async def _prepare_once(self):
         try:
             # Don't feel like formatting hasattr with
@@ -876,7 +1071,7 @@ class PageSource:
 
         Parameters
         ------------
-        menu: :class:`Menu`
+        menu: :class:`ReactionMenu`
             The menu that wants to format this page.
         page: Any
             The page returned by :meth:`PageSource.get_page`.
@@ -888,7 +1083,8 @@ class PageSource:
         """
         raise NotImplementedError
 
-class MenuPages(Menu):
+
+class ReactionMenuPages(ReactionMenu):
     """A special type of Menu dedicated to pagination.
 
     Attributes
@@ -897,6 +1093,7 @@ class MenuPages(Menu):
         The current page that we are in. Zero-indexed
         between [0, :attr:`PageSource.max_pages`).
     """
+
     def __init__(self, source, **kwargs):
         self._source = source
         self.current_page = 0
@@ -939,9 +1136,9 @@ class MenuPages(Menu):
         if isinstance(value, dict):
             return value
         elif isinstance(value, str):
-            return { 'content': value, 'embed': None }
+            return {'content': value, 'embed': None}
         elif isinstance(value, discord.Embed):
-            return { 'embed': value, 'content': None }
+            return {'embed': value, 'content': None}
 
     async def show_page(self, page_number):
         page = await self._source.get_page(page_number)
@@ -1015,6 +1212,22 @@ class MenuPages(Menu):
         """stops the pagination session."""
         self.stop()
 
+
+class ViewMenuPages(ReactionMenuPages, ViewMenu):
+    def __init__(self, source, **kwargs):
+        self._source = source
+        self.current_page = 0
+        super(ViewMenu, self).__init__(auto_send_view=False, **kwargs)
+
+    async def send_initial_message(self, ctx, channel):
+        page = await self._source.get_page(0)
+        kwargs = await self._get_kwargs_from_page(page)
+        return await self.send_with_view(channel, **kwargs)
+
+
+MenuPages = ViewMenuPages if bool(os.environ.get("DISCORD_EXT_MENUS_USE_VIEWS", "True")) else ReactionMenuPages
+
+
 class ListPageSource(PageSource):
     """A data source for a sequence of items.
 
@@ -1065,7 +1278,9 @@ class ListPageSource(PageSource):
             base = page_number * self.per_page
             return self.entries[base:base + self.per_page]
 
+
 _GroupByEntry = namedtuple('_GroupByEntry', 'key items')
+
 
 class GroupByPageSource(ListPageSource):
     """A data source for grouped by sequence of items.
@@ -1087,6 +1302,7 @@ class GroupByPageSource(ListPageSource):
     per_page: :class:`int`
         How many elements to have per page of the group.
     """
+
     def __init__(self, entries, *, key, per_page, sort=True):
         self.__entries = entries if not sort else sorted(entries, key=key)
         nested = []
@@ -1098,7 +1314,7 @@ class GroupByPageSource(ListPageSource):
             size = len(g)
 
             # Chunk the nested pages
-            nested.extend(_GroupByEntry(key=k, items=g[i:i+per_page]) for i in range(0, size, per_page))
+            nested.extend(_GroupByEntry(key=k, items=g[i:i + per_page]) for i in range(0, size, per_page))
 
         super().__init__(nested, per_page=1)
 
@@ -1113,7 +1329,7 @@ class GroupByPageSource(ListPageSource):
 
         Parameters
         ------------
-        menu: :class:`Menu`
+        menu: :class:`ReactionMenu`
             The menu that wants to format this page.
         entry
             A namedtuple with ``(key, items)`` representing the key of the
@@ -1128,6 +1344,7 @@ class GroupByPageSource(ListPageSource):
         """
         raise NotImplementedError
 
+
 def _aiter(obj, *, _isasync=inspect.iscoroutinefunction):
     cls = obj.__class__
     try:
@@ -1139,6 +1356,7 @@ def _aiter(obj, *, _isasync=inspect.iscoroutinefunction):
     if _isasync(async_iter):
         raise TypeError('{0.__name__!r} object is not an async iterable'.format(cls))
     return async_iter
+
 
 class AsyncIteratorPageSource(PageSource):
     """A data source for data backed by an asynchronous iterator.

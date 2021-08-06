@@ -1,5 +1,9 @@
 ### discord-ext-menus
 
+This branch is a "drop-in" replacement for discord-ext-menus, integrating functionality of [discord-ext-menus-views](https://github.com/oliver-ni/discord-ext-menus-views).
+
+You can change the environment variable `DISCORD_EXT_MENUS_USE_VIEWS` to choose if you would like Reaction-based menus or View-based menus. The default is `True`. This is not ideal.
+
 An experimental extension menu that makes working with reaction menus a bit easier.
 
 **There are no front-facing docs for this and it's not on PyPI. As this is meant to be a repository for testing**
@@ -21,7 +25,8 @@ The first example shows a basic menu that has a stop button and two reply button
 ```py
 from discord.ext import menus
 
-class MyMenu(menus.Menu):
+
+class MyMenu(menus.ReactionMenu):
     async def send_initial_message(self, ctx, channel):
         return await channel.send(f'Hello {ctx.author}')
 
@@ -54,7 +59,8 @@ This second example shows a confirmation menu and how we can compose it and use 
 ```py
 from discord.ext import menus
 
-class Confirm(menus.Menu):
+
+class Confirm(menus.ReactionMenu):
     def __init__(self, msg):
         super().__init__(timeout=30.0, delete_message_after=True)
         self.msg = msg
@@ -90,9 +96,9 @@ async def delete_things(ctx):
 
 ### Pagination
 
-The meat of the library is the `Menu` class but a `MenuPages` class is provided for the common use case of actually making a pagination session.
+The meat of the library is the `ReactionMenu` class but a `ReactionMenuPages` class is provided for the common use case of actually making a pagination session.
 
-The `MenuPages` works similar to `Menu` except things are separated into a `PageSource`. The actual `MenuPages` rarely needs to be modified, instead we pass in a `PageSource` that deals with the data representation and formatting of the data we want to paginate.
+The `ReactionMenuPages` works similar to `ReactionMenu` except things are separated into a `PageSource`. The actual `ReactionMenuPages` rarely needs to be modified, instead we pass in a `PageSource` that deals with the data representation and formatting of the data we want to paginate.
 
 The library comes with a few built-in page sources:
 
@@ -107,6 +113,7 @@ For the sake of example, here's a basic list source that is paginated:
 ```py
 from discord.ext import menus
 
+
 class MySource(menus.ListPageSource):
     def __init__(self, data):
         super().__init__(data, per_page=4)
@@ -115,8 +122,9 @@ class MySource(menus.ListPageSource):
         offset = menu.current_page * self.per_page
         return '\n'.join(f'{i}. {v}' for i, v in enumerate(entries, start=offset))
 
+
 # somewhere else:
-pages = menus.MenuPages(source=MySource(range(1, 100)), clear_reactions_after=True)
+pages = menus.ReactionMenuPages(source=MySource(range(1, 100)), clear_reactions_after=True)
 await pages.start(ctx)
 ```
 
@@ -127,10 +135,12 @@ Some more examples using `GroupByPageSource`:
 ```py
 from discord.ext import menus
 
+
 class Test:
     def __init__(self, key, value):
         self.key = key
         self.value = value
+
 
 data = [
     Test(key=key, value=value)
@@ -138,12 +148,14 @@ data = [
     for value in range(20)
 ]
 
+
 class Source(menus.GroupByPageSource):
     async def format_page(self, menu, entry):
         joined = '\n'.join(f'{i}. <Test value={v.value}>' for i, v in enumerate(entry.items, start=1))
         return f'**{entry.key}**\n{joined}\nPage {menu.current_page + 1}/{self.get_max_pages()}'
 
-pages = menus.MenuPages(source=Source(data, key=lambda t: t.key, per_page=12), clear_reactions_after=True)
+
+pages = menus.ReactionMenuPages(source=Source(data, key=lambda t: t.key, per_page=12), clear_reactions_after=True)
 await pages.start(ctx)
 ```
 
@@ -152,6 +164,7 @@ Another one showing `AsyncIteratorPageSource`:
 ```py
 from discord.ext import menus
 
+
 class Test:
     def __init__(self, value):
         self.value = value
@@ -159,9 +172,11 @@ class Test:
     def __repr__(self):
         return f'<Test value={self.value}>'
 
+
 async def generate(number):
     for i in range(number):
         yield Test(i)
+
 
 class Source(menus.AsyncIteratorPageSource):
     def __init__(self):
@@ -171,6 +186,7 @@ class Source(menus.AsyncIteratorPageSource):
         start = menu.current_page * self.per_page
         return f'\n'.join(f'{i}. {v!r}' for i, v in enumerate(entries, start=start))
 
-pages = menus.MenuPages(source=Source(), clear_reactions_after=True)
+
+pages = menus.ReactionMenuPages(source=Source(), clear_reactions_after=True)
 await pages.start(ctx)
 ```
