@@ -341,7 +341,7 @@ class ReactionMenu(metaclass=_MenuMeta):
     """
 
     def __init__(self, *, timeout=180.0, delete_message_after=False,
-                 clear_reactions_after=False, check_embeds=False, message=None, auto_add_ephemeral=False):
+                 clear_reactions_after=False, check_embeds=False, message=None, auto_add_ephemeral=True):
 
         self.slash = None
         self.timeout = timeout
