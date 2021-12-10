@@ -1159,7 +1159,7 @@ class ReactionMenuPages(ReactionMenu):
     async def _get_kwargs_from_page(self, page):
         value = await discord.utils.maybe_coroutine(self._source.format_page, self, page)
         kwargs = {}
-        if self.ephemeral:
+        if self.ephemeral and self.auto_add_ephemeral and self.message is None:
             kwargs["ephemeral"] = True
         if isinstance(value, dict):
             kwargs.update(value)
