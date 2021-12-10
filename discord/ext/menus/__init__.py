@@ -343,6 +343,7 @@ class ReactionMenu(metaclass=_MenuMeta):
     def __init__(self, *, timeout=180.0, delete_message_after=False,
                  clear_reactions_after=False, check_embeds=False, message=None):
 
+        self.slash = None
         self.timeout = timeout
         self.delete_message_after = delete_message_after
         self.clear_reactions_after = clear_reactions_after
@@ -687,7 +688,7 @@ class ReactionMenu(metaclass=_MenuMeta):
         # which would require awaiting, such as stopping an erroring menu.
         log.exception("Unhandled exception during menu update.", exc_info=exc)
 
-    async def start(self, ctx, *, channel=None, wait=False, slash=True):
+    async def start(self, ctx, *, channel=None, wait=False, slash=True, ephemeral=True):
         """|coro|
 
         Starts the interactive menu session.
@@ -719,6 +720,8 @@ class ReactionMenu(metaclass=_MenuMeta):
 
         self.bot = bot = ctx.bot
         self.ctx = ctx
+        self.slash = slash
+        self.ephemeral = ephemeral
         self._author_id = ctx.author.id
         channel = channel or (ctx if slash else ctx.channel)
         me = channel.guild.me if hasattr(channel, 'guild') else ctx.bot.user
@@ -728,7 +731,16 @@ class ReactionMenu(metaclass=_MenuMeta):
         self._event.clear()
         msg = self.message
         if msg is None:
-            self.message = msg = await self.send_initial_message(ctx, channel)
+            extra_kwargs: dict = {}
+            if ephemeral:
+                extra_kwargs["ephemeral"] = ephemeral
+            if extra_kwargs:
+                new_ctx = copy.copy(ctx)
+                new_ctx.send = lambda *args, **kwargs: ctx.send(*args, **kwargs, **extra_kwargs)
+
+                self.message = msg = await self.send_initial_message(new_ctx, new_ctx)  # Not ideal. Stupid.
+            else:
+                self.message = msg = await self.send_initial_message(ctx, channel)
 
         if self.should_add_reactions():
             # Start the task first so we can listen to reactions before doing anything
@@ -798,6 +810,7 @@ class ReactionMenu(metaclass=_MenuMeta):
 class ViewMenu(ReactionMenu):
     def __init__(self, *, auto_defer=True, auto_send_view=True, **kwargs):
         super().__init__(**kwargs)
+        self.slash = None
         self.auto_defer = auto_defer
         self.auto_send_view = auto_send_view
         self.view = None
@@ -917,7 +930,7 @@ class ViewMenu(ReactionMenu):
             except Exception:
                 pass
 
-    async def start(self, ctx, *, channel=None, wait=False, slash=True):
+    async def start(self, ctx, *, channel=None, wait=False, slash=True, ephemeral=True):
         try:
             del self.buttons
         except AttributeError:
@@ -931,12 +944,18 @@ class ViewMenu(ReactionMenu):
         me = channel.guild.me if is_guild else ctx.bot.user
         permissions = ctx.channel.permissions_for(me) if slash else channel.permissions_for(me)
         self._verify_permissions(ctx, channel if not slash else ctx.channel, permissions)
+        self.slash = slash
         self._event.clear()
         msg = self.message
         if msg is None:
+            extra_kwargs: dict = {}
             if self.auto_send_view:
+                extra_kwargs["view"] = self.build_view()
+            if ephemeral:
+                extra_kwargs["ephemeral"] = ephemeral
+            if extra_kwargs:
                 new_ctx = copy.copy(ctx)
-                new_ctx.send = lambda *args, **kwargs: ctx.send(*args, **kwargs, view=self.build_view())
+                new_ctx.send = lambda *args, **kwargs: ctx.send(*args, **kwargs, **extra_kwargs)
 
                 self.message = msg = await self.send_initial_message(new_ctx, new_ctx)  # Not ideal. Stupid.
             else:
@@ -1098,9 +1117,8 @@ class ReactionMenuPages(ReactionMenu):
         between [0, :attr:`PageSource.max_pages`).
     """
 
-    def __init__(self, source, ephemeral=True, **kwargs):
+    def __init__(self, source, **kwargs):
         self._source = source
-        self.ephemeral = ephemeral
         self.current_page = 0
         super().__init__(**kwargs)
 
@@ -1167,9 +1185,9 @@ class ReactionMenuPages(ReactionMenu):
         kwargs = await self._get_kwargs_from_page(page)
         return await channel.send(**kwargs)
 
-    async def start(self, ctx, *, channel=None, wait=False, ephemeral=True):
+    async def start(self, ctx, *, channel=None, wait=False, ephemeral=True, slash=True):
         await self._source._prepare_once()
-        await super().start(ctx, channel=channel, wait=wait)
+        await super().start(ctx, channel=channel, wait=wait, ephemeral=ephemeral, slash=slash)
 
     async def show_checked_page(self, page_number):
         max_pages = self._source.get_max_pages()
