@@ -341,7 +341,7 @@ class ReactionMenu(metaclass=_MenuMeta):
     """
 
     def __init__(self, *, timeout=180.0, delete_message_after=False,
-                 clear_reactions_after=False, check_embeds=False, message=None):
+                 clear_reactions_after=False, check_embeds=False, message=None, auto_add_ephemeral):
 
         self.slash = None
         self.timeout = timeout
@@ -352,6 +352,7 @@ class ReactionMenu(metaclass=_MenuMeta):
         self.__tasks = []
         self._running = True
         self.message = message
+        self.auto_add_ephemeral = auto_add_ephemeral
         self.ctx = None
         self.bot = None
         self._author_id = None
@@ -688,7 +689,7 @@ class ReactionMenu(metaclass=_MenuMeta):
         # which would require awaiting, such as stopping an erroring menu.
         log.exception("Unhandled exception during menu update.", exc_info=exc)
 
-    async def start(self, ctx, *, channel=None, wait=False, slash=True, ephemeral=False):
+    async def start(self, ctx, *, channel=None, wait=False, slash=True, ephemeral=True):
         """|coro|
 
         Starts the interactive menu session.
@@ -732,7 +733,7 @@ class ReactionMenu(metaclass=_MenuMeta):
         msg = self.message
         if msg is None:
             extra_kwargs: dict = {}
-            if ephemeral:
+            if ephemeral and self.auto_add_ephemeral:
                 extra_kwargs["ephemeral"] = ephemeral
             if extra_kwargs:
                 new_ctx = copy.copy(ctx)
@@ -810,6 +811,7 @@ class ReactionMenu(metaclass=_MenuMeta):
 class ViewMenu(ReactionMenu):
     def __init__(self, *, auto_defer=True, auto_send_view=True, **kwargs):
         super().__init__(**kwargs)
+        self.ephemeral = None
         self.slash = None
         self.auto_defer = auto_defer
         self.auto_send_view = auto_send_view
@@ -930,7 +932,7 @@ class ViewMenu(ReactionMenu):
             except Exception:
                 pass
 
-    async def start(self, ctx, *, channel=None, wait=False, slash=True, ephemeral=False):
+    async def start(self, ctx, *, channel=None, wait=False, slash=True, ephemeral=True):
         try:
             del self.buttons
         except AttributeError:
@@ -945,13 +947,14 @@ class ViewMenu(ReactionMenu):
         permissions = ctx.channel.permissions_for(me) if slash else channel.permissions_for(me)
         self._verify_permissions(ctx, channel if not slash else ctx.channel, permissions)
         self.slash = slash
+        self.ephemeral = ephemeral
         self._event.clear()
         msg = self.message
         if msg is None:
             extra_kwargs: dict = {}
             if self.auto_send_view:
                 extra_kwargs["view"] = self.build_view()
-            if ephemeral:
+            if ephemeral and self.auto_add_ephemeral:
                 extra_kwargs["ephemeral"] = ephemeral
             if extra_kwargs:
                 new_ctx = copy.copy(ctx)
@@ -971,9 +974,6 @@ class ViewMenu(ReactionMenu):
 
             if wait:
                 await self._event.wait()
-
-    def send_with_view(self, messageable, *args, **kwargs):
-        return messageable.send(*args, **kwargs, view=self.build_view())
 
     def stop(self):
         self._running = False
@@ -1185,7 +1185,7 @@ class ReactionMenuPages(ReactionMenu):
         kwargs = await self._get_kwargs_from_page(page)
         return await channel.send(**kwargs)
 
-    async def start(self, ctx, *, channel=None, wait=False, ephemeral=False, slash=True):
+    async def start(self, ctx, *, channel=None, wait=False, ephemeral=True, slash=True):
         await self._source._prepare_once()
         await super().start(ctx, channel=channel, wait=wait, ephemeral=ephemeral, slash=slash)
 
@@ -1244,12 +1244,11 @@ class ViewMenuPages(ReactionMenuPages, ViewMenu):
     def __init__(self, source, **kwargs):
         self._source = source
         self.current_page = 0
-        super().__init__(source, auto_send_view=False, **kwargs)
+        super().__init__(source, auto_send_view=False, auto_send_ephemeral=False, **kwargs)
 
-    async def send_initial_message(self, ctx, channel):
-        page = await self._source.get_page(0)
-        kwargs = await self._get_kwargs_from_page(page)
-        return await self.send_with_view(channel, **kwargs)
+    async def _get_kwargs_from_page(self, page):
+        super_kwargs = await super()._get_kwargs_from_page(page)
+        super_kwargs["view"] = self.build_view()
 
 
 MenuPages = ViewMenuPages if bool(os.environ.get("DISCORD_EXT_MENUS_USE_VIEWS", "True")) else ReactionMenuPages
