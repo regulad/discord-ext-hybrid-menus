@@ -1246,7 +1246,7 @@ class ViewMenuPages(ReactionMenuPages, ViewMenu):
     def __init__(self, source, **kwargs):
         self._source = source
         self.current_page = 0
-        super().__init__(source, auto_add_view=False, auto_add_ephemeral=False, **kwargs)
+        super().__init__(source, auto_send_view=False, auto_add_ephemeral=False, **kwargs)
 
     async def _get_kwargs_from_page(self, page):
         super_kwargs = await super()._get_kwargs_from_page(page)
