@@ -1098,8 +1098,9 @@ class ReactionMenuPages(ReactionMenu):
         between [0, :attr:`PageSource.max_pages`).
     """
 
-    def __init__(self, source, **kwargs):
+    def __init__(self, source, ephemeral=True, **kwargs):
         self._source = source
+        self.ephemeral = ephemeral
         self.current_page = 0
         super().__init__(**kwargs)
 
@@ -1137,12 +1138,16 @@ class ReactionMenuPages(ReactionMenu):
 
     async def _get_kwargs_from_page(self, page):
         value = await discord.utils.maybe_coroutine(self._source.format_page, self, page)
+        kwargs = {}
+        if self.ephemeral:
+            kwargs["ephemeral"] = True
         if isinstance(value, dict):
-            return value
+            kwargs.update(value)
         elif isinstance(value, str):
-            return {'content': value, 'embed': None}
+            kwargs.update({'content': value, 'embed': None})
         elif isinstance(value, discord.Embed):
-            return {'embed': value, 'content': None}
+            kwargs.update({'embed': value, 'content': None})
+        return kwargs
 
     async def show_page(self, page_number):
         page = await self._source.get_page(page_number)
@@ -1162,7 +1167,7 @@ class ReactionMenuPages(ReactionMenu):
         kwargs = await self._get_kwargs_from_page(page)
         return await channel.send(**kwargs)
 
-    async def start(self, ctx, *, channel=None, wait=False):
+    async def start(self, ctx, *, channel=None, wait=False, ephemeral=True):
         await self._source._prepare_once()
         await super().start(ctx, channel=channel, wait=wait)
 
