@@ -39,6 +39,8 @@ import discord
 __version__ = '1.0.0-a'
 
 # consistency with the `discord` namespaced logging
+from discord.utils import MISSING
+
 log = logging.getLogger(__name__)
 
 
@@ -820,7 +822,7 @@ class ViewMenu(ReactionMenu):
 
     def build_view(self):
         if not self.should_add_reactions():
-            return None
+            return MISSING
 
         def make_callback(button):
             async def callback(interaction):
