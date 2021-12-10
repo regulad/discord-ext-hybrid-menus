@@ -687,7 +687,7 @@ class ReactionMenu(metaclass=_MenuMeta):
         # which would require awaiting, such as stopping an erroring menu.
         log.exception("Unhandled exception during menu update.", exc_info=exc)
 
-    async def start(self, ctx, *, channel=None, wait=False):
+    async def start(self, ctx, *, channel=None, wait=False, slash=True):
         """|coro|
 
         Starts the interactive menu session.
@@ -720,7 +720,7 @@ class ReactionMenu(metaclass=_MenuMeta):
         self.bot = bot = ctx.bot
         self.ctx = ctx
         self._author_id = ctx.author.id
-        channel = channel or ctx.channel
+        channel = channel or (ctx if slash else ctx.channel)
         me = channel.guild.me if hasattr(channel, 'guild') else ctx.bot.user
         permissions = channel.permissions_for(me)
         self.__me = discord.Object(id=me.id)
@@ -917,7 +917,7 @@ class ViewMenu(ReactionMenu):
             except Exception:
                 pass
 
-    async def start(self, ctx, *, channel=None, wait=False):
+    async def start(self, ctx, *, channel=None, wait=False, slash=True):
         try:
             del self.buttons
         except AttributeError:
@@ -926,7 +926,7 @@ class ViewMenu(ReactionMenu):
         self.bot = bot = ctx.bot
         self.ctx = ctx
         self._author_id = ctx.author.id
-        channel = channel or ctx.channel
+        channel = channel or (ctx if slash else ctx.channel)
         is_guild = hasattr(channel, "guild")
         me = channel.guild.me if is_guild else ctx.bot.user
         permissions = channel.permissions_for(me)
