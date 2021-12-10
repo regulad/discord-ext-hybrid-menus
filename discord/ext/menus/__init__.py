@@ -1249,8 +1249,9 @@ class ViewMenuPages(ReactionMenuPages, ViewMenu):
         super().__init__(source, auto_send_view=False, auto_add_ephemeral=False, **kwargs)
 
     async def _get_kwargs_from_page(self, page):
-        super_kwargs = await super()._get_kwargs_from_page(page)
-        super_kwargs["view"] = self.build_view()
+        kwargs = await super()._get_kwargs_from_page(page)
+        kwargs["view"] = self.build_view()
+        return kwargs
 
 
 MenuPages = ViewMenuPages if bool(os.environ.get("DISCORD_EXT_MENUS_USE_VIEWS", "True")) else ReactionMenuPages
