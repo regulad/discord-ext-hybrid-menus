@@ -722,9 +722,9 @@ class ReactionMenu(metaclass=_MenuMeta):
         self._author_id = ctx.author.id
         channel = channel or (ctx if slash else ctx.channel)
         me = channel.guild.me if hasattr(channel, 'guild') else ctx.bot.user
-        permissions = channel.permissions_for(me)
+        permissions = ctx.channel.permissions_for(me) if slash else channel.permissions_for(me)
         self.__me = discord.Object(id=me.id)
-        self._verify_permissions(ctx, channel, permissions)
+        self._verify_permissions(ctx, channel if not slash else ctx.channel, permissions)
         self._event.clear()
         msg = self.message
         if msg is None:
@@ -929,8 +929,8 @@ class ViewMenu(ReactionMenu):
         channel = channel or (ctx if slash else ctx.channel)
         is_guild = hasattr(channel, "guild")
         me = channel.guild.me if is_guild else ctx.bot.user
-        permissions = channel.permissions_for(me)
-        self._verify_permissions(ctx, channel, permissions)
+        permissions = ctx.channel.permissions_for(me) if slash else channel.permissions_for(me)
+        self._verify_permissions(ctx, channel if not slash else ctx.channel, permissions)
         self._event.clear()
         msg = self.message
         if msg is None:
