@@ -688,7 +688,7 @@ class ReactionMenu(metaclass=_MenuMeta):
         # which would require awaiting, such as stopping an erroring menu.
         log.exception("Unhandled exception during menu update.", exc_info=exc)
 
-    async def start(self, ctx, *, channel=None, wait=False, slash=True, ephemeral=True):
+    async def start(self, ctx, *, channel=None, wait=False, slash=True, ephemeral=False):
         """|coro|
 
         Starts the interactive menu session.
@@ -930,7 +930,7 @@ class ViewMenu(ReactionMenu):
             except Exception:
                 pass
 
-    async def start(self, ctx, *, channel=None, wait=False, slash=True, ephemeral=True):
+    async def start(self, ctx, *, channel=None, wait=False, slash=True, ephemeral=False):
         try:
             del self.buttons
         except AttributeError:
@@ -1185,7 +1185,7 @@ class ReactionMenuPages(ReactionMenu):
         kwargs = await self._get_kwargs_from_page(page)
         return await channel.send(**kwargs)
 
-    async def start(self, ctx, *, channel=None, wait=False, ephemeral=True, slash=True):
+    async def start(self, ctx, *, channel=None, wait=False, ephemeral=False, slash=True):
         await self._source._prepare_once()
         await super().start(ctx, channel=channel, wait=wait, ephemeral=ephemeral, slash=slash)
 
