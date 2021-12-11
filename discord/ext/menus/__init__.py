@@ -32,6 +32,7 @@ import itertools
 import logging
 import re
 from collections import OrderedDict, namedtuple
+from typing import Dict, Any
 
 import discord
 
@@ -343,7 +344,7 @@ class ReactionMenu(metaclass=_MenuMeta):
     """
 
     def __init__(self, *, timeout=180.0, delete_message_after=False,
-                 clear_reactions_after=False, check_embeds=False, message=None, auto_add_ephemeral=True):
+                 clear_reactions_after=False, check_embeds=False, message=None, auto_add_ephemeral=True, auto_add_kwargs=False):
 
         self.slash = None
         self.timeout = timeout
@@ -355,12 +356,19 @@ class ReactionMenu(metaclass=_MenuMeta):
         self._running = True
         self.message = message
         self.auto_add_ephemeral = auto_add_ephemeral
+        self.auto_add_kwargs = auto_add_kwargs
         self.ctx = None
         self.bot = None
         self._author_id = None
         self._buttons = self.__class__.get_buttons()
         self._lock = asyncio.Lock()
         self._event = asyncio.Event()
+
+    def _get_kwargs(self) -> Dict[str, Any]:
+        kwargs = {}
+        if self.ephemeral and self.auto_add_ephemeral and self.message is None:
+            kwargs["ephemeral"] = True
+        return kwargs
 
     @discord.utils.cached_property
     def buttons(self):
@@ -734,12 +742,9 @@ class ReactionMenu(metaclass=_MenuMeta):
         self._event.clear()
         msg = self.message
         if msg is None:
-            extra_kwargs: dict = {}
-            if ephemeral and self.auto_add_ephemeral:
-                extra_kwargs["ephemeral"] = ephemeral
-            if extra_kwargs:
+            if self.auto_add_kwargs:
                 new_ctx = copy.copy(ctx)
-                new_ctx.send = lambda *args, **kwargs: ctx.send(*args, **kwargs, **extra_kwargs)
+                new_ctx.send = lambda *args, **kwargs: ctx.send(*args, **kwargs, **self._get_kwargs())
 
                 self.message = msg = await self.send_initial_message(new_ctx, new_ctx)  # Not ideal. Stupid.
             else:
@@ -813,12 +818,17 @@ class ReactionMenu(metaclass=_MenuMeta):
 class ViewMenu(ReactionMenu):
     def __init__(self, *, auto_defer=True, auto_send_view=True, **kwargs):
         super().__init__(**kwargs)
-        self.ephemeral = None
         self.slash = None
         self.auto_defer = auto_defer
         self.auto_send_view = auto_send_view
         self.view = None
         self.__tasks = []
+
+    def _get_kwargs(self) -> Dict[str, Any]:
+        kwargs = super()._get_kwargs()
+        if self.auto_send_view:
+            kwargs["view"] = self.build_view()
+        return kwargs
 
     def build_view(self):
         if not self.should_add_reactions():
@@ -953,14 +963,9 @@ class ViewMenu(ReactionMenu):
         self._event.clear()
         msg = self.message
         if msg is None:
-            extra_kwargs: dict = {}
-            if self.auto_send_view:
-                extra_kwargs["view"] = self.build_view()
-            if ephemeral and self.auto_add_ephemeral:
-                extra_kwargs["ephemeral"] = ephemeral
-            if extra_kwargs:
+            if self.auto_add_kwargs:
                 new_ctx = copy.copy(ctx)
-                new_ctx.send = lambda *args, **kwargs: ctx.send(*args, **kwargs, **extra_kwargs)
+                new_ctx.send = lambda *args, **kwargs: ctx.send(*args, **kwargs, **self._get_kwargs())
 
                 self.message = msg = await self.send_initial_message(new_ctx, new_ctx)  # Not ideal. Stupid.
             else:
@@ -1158,9 +1163,7 @@ class ReactionMenuPages(ReactionMenu):
 
     async def _get_kwargs_from_page(self, page):
         value = await discord.utils.maybe_coroutine(self._source.format_page, self, page)
-        kwargs = {}
-        if self.ephemeral and self.auto_add_ephemeral and self.message is None:
-            kwargs["ephemeral"] = True
+        kwargs = super()._get_kwargs()
         if isinstance(value, dict):
             kwargs.update(value)
         elif isinstance(value, str):
@@ -1243,15 +1246,7 @@ class ReactionMenuPages(ReactionMenu):
 
 
 class ViewMenuPages(ReactionMenuPages, ViewMenu):
-    def __init__(self, source, **kwargs):
-        self._source = source
-        self.current_page = 0
-        super().__init__(source, auto_send_view=False, auto_add_ephemeral=False, **kwargs)
-
-    async def _get_kwargs_from_page(self, page):
-        kwargs = await super()._get_kwargs_from_page(page)
-        kwargs["view"] = self.build_view()
-        return kwargs
+    pass
 
 
 MenuPages = ViewMenuPages if bool(os.environ.get("DISCORD_EXT_MENUS_USE_VIEWS", "True")) else ReactionMenuPages
