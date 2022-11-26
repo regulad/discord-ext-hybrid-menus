@@ -37,7 +37,7 @@ from typing import Dict, Any
 import discord
 
 # Needed for the setup.py script
-__version__ = '1.0.0-a'
+__version__ = '1.0.2'
 
 # consistency with the `discord` namespaced logging
 from discord.utils import MISSING
