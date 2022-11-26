@@ -24,12 +24,12 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 """
 
-import copy
-import os
 import asyncio
+import copy
 import inspect
 import itertools
 import logging
+import os
 import re
 from collections import OrderedDict, namedtuple
 from typing import Dict, Any
@@ -165,15 +165,47 @@ class Button:
     lock: :class:`bool`
         Whether the button should lock all other buttons from being processed
         until this button is done. Defaults to ``True``.
+    style: :class:`discord.ButtonStyle`
+        The style of the button. Defaults to ``discord.ButtonStyle.secondary``.
+        Used only with view-based menus.
+    label: Optional[:class:`str`]
+        The label of the button. Defaults to ``None``.
+        Used only with view-based menus.
+    url: Optional[:class:`str`]
+        The URL of the button. Defaults to ``None``.
+        Used only with view-based menus.
+    custom_id: Optional[:class:`str`]
+        The custom ID of the button. Defaults to ``None``.
+        Used only with view-based menus.
     """
-    __slots__ = ('emoji', '_action', '_skip_if', 'position', 'lock')
+    __slots__ = (
+        'emoji', '_action', '_skip_if', 'position', 'lock',
+        'style', 'label', 'url', 'custom_id'  # view-based
+    )
 
-    def __init__(self, emoji, action, *, skip_if=None, position=None, lock=True):
+    def __init__(
+            self,
+            emoji,
+            action,
+            *,
+            skip_if=None,
+            position=None,
+            lock=True,
+            style=None,
+            label=None,
+            url=None,
+            custom_id=None,
+    ):
         self.emoji = _cast_emoji(emoji)
         self.action = action
         self.skip_if = skip_if
         self.position = position or Position(0)
         self.lock = lock
+        # view attributes
+        self.style = style
+        self.label = label
+        self.url = url
+        self.custom_id = custom_id
 
     @property
     def skip_if(self):
@@ -344,7 +376,8 @@ class ReactionMenu(metaclass=_MenuMeta):
     """
 
     def __init__(self, *, timeout=180.0, delete_message_after=False,
-                 clear_reactions_after=False, check_embeds=False, message=None, auto_add_ephemeral=True, auto_add_kwargs=False):
+                 clear_reactions_after=False, check_embeds=False, message=None, auto_add_ephemeral=True,
+                 auto_add_kwargs=False):
 
         self.slash = None
         self.timeout = timeout
@@ -830,7 +863,7 @@ class ViewMenu(ReactionMenu):
             kwargs["view"] = self.build_view()
         return kwargs
 
-    def build_view(self):
+    def build_view(self, *, all_disabled=False):
         if not self.should_add_reactions():
             return MISSING
 
@@ -843,6 +876,9 @@ class ViewMenu(ReactionMenu):
                 try:
                     if button.lock:
                         async with self._lock:
+                            # shows other buttons as locked
+                            await interaction.edit_original_response(view=self.build_view(all_disabled=True))
+                            # fancy, fancy
                             if self._running:
                                 await button(self, interaction)
                     else:
@@ -854,7 +890,15 @@ class ViewMenu(ReactionMenu):
 
         view = discord.ui.View(timeout=self.timeout)
         for i, (emoji, button) in enumerate(self.buttons.items()):
-            item = discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=emoji, row=i // 5)
+            item = discord.ui.Button(
+                disabled=all_disabled,
+                style=button.style or discord.ButtonStyle.secondary,
+                label=button.label or None,
+                url=button.url or None,
+                custom_id=button.custom_id or None,
+                emoji=emoji,
+                row=i // 5
+            )
             item.callback = make_callback(button)
             view.add_item(item)
 
