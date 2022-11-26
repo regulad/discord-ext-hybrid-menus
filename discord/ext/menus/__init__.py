@@ -37,7 +37,7 @@ from typing import Dict, Any
 import discord
 
 # Needed for the setup.py script
-__version__ = '1.0.2'
+__version__ = '1.0.3'
 
 # consistency with the `discord` namespaced logging
 from discord.utils import MISSING
@@ -877,7 +877,7 @@ class ViewMenu(ReactionMenu):
                     if button.lock:
                         async with self._lock:
                             # shows other buttons as locked
-                            await interaction.edit_original_response(view=self.build_view(all_disabled=True))
+                            await self.message.edit(view=self.build_view(all_disabled=True))
                             # fancy, fancy
                             if self._running:
                                 await button(self, interaction)

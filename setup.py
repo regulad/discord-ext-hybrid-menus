@@ -25,9 +25,9 @@ if version.endswith(('a', 'b', 'rc')):
     except Exception:
         pass
 
-setup(name='discord-ext-menus',
+setup(name='discord-ext-hybrid-menus',
       author='Rapptz',
-      url='https://github.com/Rapptz/discord-ext-menus',
+      url='https://github.com/regulad/discord-ext-hybrid-menus',
       version=version,
       packages=['discord.ext.menus'],
       license='MIT',
